@@ -5,8 +5,10 @@ import Testing
 @Suite struct OpeningClickTests {
     @Test func openingReleaseDoesNotChooseTheOverlappingRow() {
         var click = OpeningClick(origin: CGPoint(x: 100, y: 100))
+        #expect(click.isTracking)
         let ignoresOpeningRelease = click.shouldIgnoreRelease(at: CGPoint(x: 101, y: 100))
         #expect(ignoresOpeningRelease)
+        #expect(!click.isTracking)
         // The next click is a deliberate choice, even at the same location.
         let ignoresNextRelease = click.shouldIgnoreRelease(at: CGPoint(x: 101, y: 100))
         #expect(!ignoresNextRelease)
@@ -28,6 +30,7 @@ import Testing
 
     @Test func keyboardAndAccessibilityOpeningDoNotConsumeTheNextClick() {
         var click = OpeningClick(origin: nil)
+        #expect(!click.isTracking)
         let ignoresRelease = click.shouldIgnoreRelease(at: CGPoint(x: 100, y: 100))
         #expect(!ignoresRelease)
     }

@@ -6,6 +6,8 @@ struct OpeningClick {
     private var origin: CGPoint?
     private var hasDragged = false
 
+    var isTracking: Bool { origin != nil }
+
     init(origin: CGPoint?) { self.origin = origin }
 
     mutating func dragged(to point: CGPoint) {

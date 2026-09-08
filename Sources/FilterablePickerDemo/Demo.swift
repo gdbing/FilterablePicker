@@ -38,7 +38,13 @@ private final class DemoModel: ObservableObject {
 
 private struct DemoView: View {
     @StateObject private var model = DemoModel()
-    private let choices = ["Morning", "Late morning", "Afternoon", "Late afternoon", "Evening", "After dinner", "Midnight", "Café break", "日本語", "👩🏽‍💻 Focus time"].map(Choice.init)
+    private let choices = [
+        "Morning", "Late morning", "Noon", "Early afternoon", "Afternoon", "Late afternoon",
+        "Evening", "After dinner", "Midnight", "Breakfast", "Café break", "Commute",
+        "Daily planning", "Deep work", "Email", "Focus time", "Lunch", "Meeting",
+        "Project review", "Reading", "Research", "Short break", "Team check-in", "Writing",
+        "Exercise", "Walk", "Dinner", "Personal time", "日本語", "👩🏽‍💻 Focus time"
+    ].map(Choice.init)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -62,7 +68,7 @@ private struct DemoView: View {
             }
             Text("Selection: \(model.selection)")
                 .foregroundStyle(.secondary)
-            Text("Open the picker and type ‘aft’. Delete removes a character; ⌘Delete clears the filter. Try a filter with no matches, too.")
+            Text("Open the picker and type ‘aft’. Delete removes a character; ⌘Delete clears the filter. Drag near a menu edge to scroll the long list.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

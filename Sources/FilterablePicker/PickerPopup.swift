@@ -101,6 +101,10 @@ final class PickerPopup: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTa
     private var visible: [PickerOption] = []
     private var eventMonitor: Any?
     private var observers: [NSObjectProtocol] = []
+    private var autoscrollTimer: Timer?
+    private var autoscrollDirection = 0
+    private var dragLocation: CGPoint?
+    private var isTrackingMenuDrag = false
     private var isPresented = false
     private var menuWidth: CGFloat = 180
     private var topEdge: CGFloat = 0
@@ -225,6 +229,8 @@ final class PickerPopup: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTa
     func dismiss() {
         guard isPresented else { return }
         isPresented = false
+        stopAutoscroll()
+        isTrackingMenuDrag = false
         if let eventMonitor { NSEvent.removeMonitor(eventMonitor) }
         eventMonitor = nil
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
@@ -250,10 +256,16 @@ final class PickerPopup: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTa
                 guard let self, self.isPresented else { return true }
                 if event.type == .leftMouseDragged || event.type == .leftMouseUp {
                     let screenPoint = event.window?.convertPoint(toScreen: event.locationInWindow) ?? NSEvent.mouseLocation
+                    let isTrackedRelease = event.type == .leftMouseUp && (self.openingClick.isTracking || self.isTrackingMenuDrag)
                     if event.type == .leftMouseDragged {
                         self.openingClick.dragged(to: screenPoint)
-                    } else if self.openingClick.shouldIgnoreRelease(at: screenPoint) {
-                        return false
+                        if self.openingClick.isTracking || self.isTrackingMenuDrag {
+                            self.updateAutoscroll(at: screenPoint)
+                        }
+                    } else {
+                        self.isTrackingMenuDrag = false
+                        self.stopAutoscroll()
+                        if self.openingClick.shouldIgnoreRelease(at: screenPoint) { return false }
                     }
                     let point = self.table.convert(self.panel.convertPoint(fromScreen: screenPoint), from: nil)
                     if self.table.visibleRect.contains(point) {
@@ -262,15 +274,22 @@ final class PickerPopup: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTa
                         if event.type == .leftMouseUp, self.visible.indices.contains(row) { self.commit() }
                         return false
                     }
+                    if isTrackedRelease {
+                        self.dismiss()
+                        return false
+                    }
                     return true
                 }
                 if event.window !== self.panel {
-                    let isAnchor = self.anchor.map { anchor in
-                        event.window === anchor.window && anchor.bounds.contains(anchor.convert(event.locationInWindow, from: nil))
-                    } ?? false
                     self.dismiss()
-                    // A second click on the button closes it instead of reopening.
-                    return !isAnchor
+                    // Like a tracked menu, also consume clicks elsewhere in this
+                    // app so they cannot trigger a control behind the popup.
+                    return false
+                }
+                if event.type == .leftMouseDown {
+                    let point = self.table.convert(event.locationInWindow, from: nil)
+                    let row = self.table.row(at: point)
+                    self.isTrackingMenuDrag = self.table.visibleRect.contains(point) && self.visible.indices.contains(row)
                 }
                 return true
             }
@@ -286,6 +305,61 @@ final class PickerPopup: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTa
             observers.append(NotificationCenter.default.addObserver(forName: name, object: object, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.dismiss() }
             })
+        }
+    }
+
+    private func updateAutoscroll(at screenPoint: CGPoint) {
+        dragLocation = screenPoint
+        let listRect = panel.convertToScreen(scroll.convert(scroll.bounds, to: nil))
+        let threshold = min(rowHeight, listRect.height / 3)
+        let isNearHorizontally = screenPoint.x >= listRect.minX - 4 && screenPoint.x <= listRect.maxX + 4
+        let direction: Int
+        if isNearHorizontally && screenPoint.y >= listRect.minY && screenPoint.y <= listRect.minY + threshold {
+            direction = 1
+        } else if isNearHorizontally && screenPoint.y <= listRect.maxY && screenPoint.y >= listRect.maxY - threshold {
+            direction = -1
+        } else {
+            direction = 0
+        }
+        guard direction != 0 else {
+            stopAutoscroll()
+            return
+        }
+        autoscrollDirection = direction
+        guard autoscrollTimer == nil else { return }
+        performAutoscroll()
+        let timer = Timer(timeInterval: 0.08, target: self, selector: #selector(autoscrollTimerFired(_:)), userInfo: nil, repeats: true)
+        RunLoop.main.add(timer, forMode: .common)
+        autoscrollTimer = timer
+    }
+
+    private func stopAutoscroll() {
+        autoscrollTimer?.invalidate()
+        autoscrollTimer = nil
+        autoscrollDirection = 0
+        dragLocation = nil
+    }
+
+    @objc private func autoscrollTimerFired(_ timer: Timer) {
+        performAutoscroll()
+    }
+
+    private func performAutoscroll() {
+        guard isPresented, autoscrollDirection != 0 else {
+            stopAutoscroll()
+            return
+        }
+        let clip = scroll.contentView
+        let maximumY = max(0, table.bounds.height - clip.bounds.height)
+        var origin = clip.bounds.origin
+        let nextY = min(max(origin.y + CGFloat(autoscrollDirection) * rowHeight, 0), maximumY)
+        guard nextY != origin.y else { return }
+        origin.y = nextY
+        clip.scroll(to: origin)
+        scroll.reflectScrolledClipView(clip)
+        if let dragLocation {
+            let point = table.convert(panel.convertPoint(fromScreen: dragLocation), from: nil)
+            highlight(table.visibleRect.contains(point) ? table.row(at: point) : -1)
         }
     }
 
