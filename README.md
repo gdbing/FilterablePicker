@@ -93,4 +93,14 @@ For integration testing, also check:
 - Japanese/Chinese/Korean input methods, dead keys, dictation and custom key bindings.
 - VoiceOver opening, exploring and choosing results.
 
-The package uses public AppKit and SwiftUI APIs only.
+The `FilterablePicker` library uses public AppKit and SwiftUI APIs only.
+
+## Private DVTFilteringMenu comparison
+
+`DVTFilteringMenuPrototype` places four implementations side by side: a stock SwiftUI menu picker, the public package implementation, a normal `NSMenu` using AppKit's private native filtering UI, and Xcode's private `DVTFilteringMenu`. It exists only to compare interaction and appearance. The DVT version dynamically loads `DVTKit.framework` from Xcode-beta or Xcode; neither private prototype should be distributed through the App Store.
+
+```sh
+./Scripts/run-dvt-prototype.sh
+```
+
+Set `DVTKIT_FRAMEWORK_PATH` to a different `DVTKit.framework` path when needed. The `FilterablePicker` library itself continues to use public AppKit APIs only.
