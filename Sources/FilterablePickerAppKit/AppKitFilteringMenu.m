@@ -1,17 +1,12 @@
-#import "DVTFilteringMenuSupport.h"
+#import "FilterablePickerAppKit.h"
 
-@interface AppKitFilteringMenu : NSMenu <NSMenuDelegate>
+@interface FPAppKitFilteringMenu : NSMenu <NSMenuDelegate>
 - (void)performSearchWithString:(nullable NSString *)query inMenu:(NSMenu *)menu;
 @end
 
-@implementation AppKitFilteringMenu
+@implementation FPAppKitFilteringMenu
 
 - (instancetype)initWithTitle:(NSString *)title {
-    SEL filteringCapability = NSSelectorFromString(@"_delegateWantsDVTPerformSearchCall");
-    if (![NSMenu instancesRespondToSelector:filteringCapability]) {
-        return nil;
-    }
-
     self = [super initWithTitle:title];
     if (self) {
         [super setDelegate:self];
@@ -32,15 +27,11 @@
     [self resetFilterInMenu:menu];
 }
 
-// This is the private callback used by AppKit's native menu-filtering UI.
-// AppKit owns the search field and its first-responder behavior; the prototype
-// only decides which menu items match the current query.
+// AppKit owns the native filter field, focus, keyboard handling, layout, menu
+// tracking, and dismissal. This callback only supplies substring matching.
 - (void)performSearchWithString:(nullable NSString *)query inMenu:(NSMenu *)menu {
     NSString *normalizedQuery = query ?: @"";
     for (NSMenuItem *item in menu.itemArray) {
-        if (item.separatorItem || item.view != nil) {
-            continue;
-        }
         item.hidden = normalizedQuery.length > 0 &&
             [item.title localizedCaseInsensitiveContainsString:normalizedQuery] == NO;
     }
@@ -54,6 +45,14 @@
 
 @end
 
-NSMenu *CreateAppKitFilteringMenu(NSString *title) {
-    return [[AppKitFilteringMenu alloc] initWithTitle:title];
+BOOL FPIsNativeMenuFilteringAvailable(void) {
+    SEL capability = NSSelectorFromString(@"_delegateWantsDVTPerformSearchCall");
+    return [NSMenu instancesRespondToSelector:capability];
+}
+
+NSMenu *FPCreateNativeFilteringMenu(NSString *title) {
+    if (!FPIsNativeMenuFilteringAvailable()) {
+        return nil;
+    }
+    return [[FPAppKitFilteringMenu alloc] initWithTitle:title];
 }

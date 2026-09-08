@@ -1,18 +1,21 @@
 import AppKit
+import FilterablePickerAppKit
 import SwiftUI
 
-/// A macOS popup picker with native text editing and substring filtering.
+/// A SwiftUI menu picker that uses AppKit's native menu-filtering interface.
 ///
-/// Option IDs must be unique and stable. Filtering never changes `selection`;
-/// a click or Return commits the highlighted option.
+/// The filtering interface relies on private AppKit API and is unsuitable for
+/// Mac App Store distribution. On systems without that API, this remains a
+/// normal, unfiltered `NSPopUpButton`.
 @MainActor
 public struct FilterablePicker<Item: Identifiable>: NSViewRepresentable {
     private let label: String
     private let items: [Item]
     private let title: (Item) -> String
     @Binding private var selection: Item.ID
-    @Environment(\.isEnabled) private var isEnabled
+
     @Environment(\.controlSize) private var controlSize
+    @Environment(\.isEnabled) private var isEnabled
 
     public init(
         _ label: String,
@@ -26,89 +29,133 @@ public struct FilterablePicker<Item: Identifiable>: NSViewRepresentable {
         _selection = selection
     }
 
-    public func makeNSView(context: Context) -> FilterablePickerButton {
-        FilterablePickerButton(frame: .zero, pullsDown: false)
+    public func makeCoordinator() -> Coordinator {
+        Coordinator()
     }
 
-    public func updateNSView(_ button: FilterablePickerButton, context: Context) {
-        let options = items.map { PickerOption(id: AnyHashable($0.id), title: title($0)) }
-        button.configure(options: options, selection: AnyHashable(selection), label: label)
-        button.isEnabled = isEnabled
-        switch controlSize {
-        case .mini: button.controlSize = .mini
-        case .small: button.controlSize = .small
-        case .large: button.controlSize = .large
-        default: button.controlSize = .regular
+    public func makeNSView(context: Context) -> NSPopUpButton {
+        let button = NSPopUpButton(frame: .zero, pullsDown: false)
+        button.menu = FPCreateNativeFilteringMenu(label) ?? NSMenu(title: label)
+        context.coordinator.button = button
+        return button
+    }
+
+    public func updateNSView(_ button: NSPopUpButton, context: Context) {
+        let options = items.map {
+            Option(id: AnyHashable($0.id), title: title($0))
         }
-        button.font = .systemFont(ofSize: NSFont.systemFontSize(for: button.controlSize))
-        button.onSelect = { id in
-            if let item = items.first(where: { AnyHashable($0.id) == id }) {
+
+        context.coordinator.update(
+            options: options,
+            selection: AnyHashable(selection),
+            label: label,
+            onSelect: { selectedID in
+                guard let item = items.first(where: { AnyHashable($0.id) == selectedID }) else {
+                    return
+                }
                 selection = item.id
             }
-        }
-        if !isEnabled { button.dismissPopup() }
+        )
+
+        button.isEnabled = isEnabled && !items.isEmpty
+        button.controlSize = controlSize.nsControlSize
+        button.font = .systemFont(ofSize: NSFont.systemFontSize(for: button.controlSize))
     }
 
-    public static func dismantleNSView(_ button: FilterablePickerButton, coordinator: ()) {
-        button.dismissPopup()
+    @MainActor
+    public final class Coordinator: NSObject {
+        fileprivate weak var button: NSPopUpButton?
+
+        private var renderedOptions: [Option] = []
+        private var menuItems: [NSMenuItem] = []
+        private var onSelect: ((AnyHashable) -> Void)?
+
+        fileprivate func update(
+            options: [Option],
+            selection: AnyHashable,
+            label: String,
+            onSelect: @escaping (AnyHashable) -> Void
+        ) {
+            guard let button, let menu = button.menu else { return }
+
+            self.onSelect = onSelect
+            if options != renderedOptions {
+                renderedOptions = options
+                menu.removeAllItems()
+                menuItems = options.map { option in
+                    let item = NSMenuItem(
+                        title: option.title,
+                        action: #selector(choose(_:)),
+                        keyEquivalent: ""
+                    )
+                    item.target = self
+                    item.representedObject = OptionBox(option)
+                    menu.addItem(item)
+                    return item
+                }
+            }
+
+            var selectedItem: NSMenuItem?
+            for item in menuItems {
+                let isSelected = (item.representedObject as? OptionBox)?.option.id == selection
+                item.state = isSelected ? .on : .off
+                if isSelected { selectedItem = item }
+            }
+
+            if let selectedItem {
+                button.select(selectedItem)
+                button.synchronizeTitleAndSelectedItem()
+            } else {
+                button.select(nil)
+                button.title = label
+            }
+
+            button.setAccessibilityLabel(label)
+            button.setAccessibilityValue(selectedItem?.title ?? label)
+            button.setAccessibilityHelp("Open the choices and type to filter.")
+        }
+
+        @objc private func choose(_ sender: NSMenuItem) {
+            guard let option = (sender.representedObject as? OptionBox)?.option else {
+                return
+            }
+            for item in menuItems {
+                item.state = item === sender ? .on : .off
+            }
+            button?.select(sender)
+            button?.synchronizeTitleAndSelectedItem()
+            onSelect?(option.id)
+        }
     }
 }
 
-/// The AppKit backing view. Configure it through `FilterablePicker`.
-@MainActor
-public final class FilterablePickerButton: NSPopUpButton {
-    private var options: [PickerOption] = []
-    private var selectedID: AnyHashable?
-    private var popup: PickerPopup?
-    var onSelect: ((AnyHashable) -> Void)?
+/// Runtime information for apps that want to report or gate filtering support.
+public enum FilterablePickerRuntime {
+    public static var supportsNativeFiltering: Bool {
+        FPIsNativeMenuFilteringAvailable()
+    }
+}
 
-    func configure(options: [PickerOption], selection: AnyHashable, label: String) {
-        self.options = options
-        selectedID = selection
-        let displayedTitle = options.first(where: { $0.id == selection })?.title ?? label
-        if title != displayedTitle || numberOfItems != 1 {
-            removeAllItems()
-            addItem(withTitle: displayedTitle)
+private struct Option: Equatable {
+    let id: AnyHashable
+    let title: String
+}
+
+private final class OptionBox: NSObject {
+    let option: Option
+
+    init(_ option: Option) {
+        self.option = option
+    }
+}
+
+private extension ControlSize {
+    var nsControlSize: NSControl.ControlSize {
+        switch self {
+        case .mini: .mini
+        case .small: .small
+        case .large: .large
+        default: .regular
         }
-        setAccessibilityLabel(label)
-        setAccessibilityValue(displayedTitle)
-        setAccessibilityHelp("Open the choices and type to filter. Use Up and Down to choose, Return to select, or Escape to cancel.")
-        popup?.update(options: options, selection: selection)
-        invalidateIntrinsicContentSize()
     }
-
-    public override func mouseDown(with event: NSEvent) { showPopup(openingEvent: event) }
-    public override func performClick(_ sender: Any?) { showPopup() }
-    public override func accessibilityPerformPress() -> Bool {
-        guard isEnabled else { return false }
-        showPopup()
-        return true
-    }
-
-    public override func accessibilityPerformShowMenu() -> Bool { accessibilityPerformPress() }
-
-    public override func keyDown(with event: NSEvent) {
-        if [36, 49, 125, 126].contains(event.keyCode) { showPopup() }
-        else { super.keyDown(with: event) }
-    }
-
-    public override func viewWillMove(toWindow newWindow: NSWindow?) {
-        if newWindow !== window { dismissPopup() }
-        super.viewWillMove(toWindow: newWindow)
-    }
-
-    private func showPopup(openingEvent: NSEvent? = nil) {
-        guard isEnabled, window != nil else { return }
-        if popup != nil { dismissPopup(); return }
-        let openingLocation = openingEvent.flatMap { event in
-            event.window?.convertPoint(toScreen: event.locationInWindow)
-        }
-        let popup = PickerPopup(anchor: self, options: options, selection: selectedID, openingLocation: openingLocation)
-        self.popup = popup
-        popup.onSelect = { [weak self] id in self?.onSelect?(id) }
-        popup.onDismiss = { [weak self] in self?.popup = nil }
-        popup.present()
-    }
-
-    func dismissPopup() { popup?.dismiss() }
 }

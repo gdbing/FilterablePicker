@@ -5,21 +5,16 @@ let package = Package(
     name: "FilterablePicker",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "FilterablePicker", targets: ["FilterablePicker"]),
-        .executable(name: "FilterablePickerDemo", targets: ["FilterablePickerDemo"]),
-        .executable(name: "DVTFilteringMenuPrototype", targets: ["DVTFilteringMenuPrototype"])
+        .library(name: "FilterablePicker", targets: ["FilterablePicker"])
     ],
     targets: [
-        .target(name: "FilterablePicker"),
-        .executableTarget(name: "FilterablePickerDemo", dependencies: ["FilterablePicker"]),
         .target(
-            name: "DVTFilteringMenuSupport",
+            name: "FilterablePicker",
+            dependencies: ["FilterablePickerAppKit"]
+        ),
+        .target(
+            name: "FilterablePickerAppKit",
             publicHeadersPath: "include"
-        ),
-        .executableTarget(
-            name: "DVTFilteringMenuPrototype",
-            dependencies: ["FilterablePicker", "DVTFilteringMenuSupport"]
-        ),
-        .testTarget(name: "FilterablePickerTests", dependencies: ["FilterablePicker"])
+        )
     ]
 )
