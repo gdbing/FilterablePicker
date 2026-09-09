@@ -15,6 +15,10 @@ let package = Package(
         .target(
             name: "FilterablePickerAppKit",
             publicHeadersPath: "include"
-        )
+        ),
+        .testTarget(
+            name: "FilterablePickerTests",
+            dependencies: ["FilterablePicker"]
+        ),
     ]
 )

@@ -34,8 +34,11 @@ public struct FilterablePicker<Item: Identifiable>: NSViewRepresentable {
     }
 
     public func makeNSView(context: Context) -> NSPopUpButton {
-        let button = NSPopUpButton(frame: .zero, pullsDown: false)
+        let button = FlexiblePopUpButton(frame: .zero, pullsDown: false)
         button.menu = FPCreateNativeFilteringMenu(label) ?? NSMenu(title: label)
+        button.cell?.lineBreakMode = .byTruncatingTail
+        button.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         context.coordinator.button = button
         return button
     }
@@ -129,6 +132,15 @@ public struct FilterablePicker<Item: Identifiable>: NSViewRepresentable {
     }
 }
 
+/// Menu item titles determine an `NSPopUpButton`'s normal intrinsic width. The
+/// menu should be able to fit those titles, but the control should take the
+/// width offered by SwiftUI rather than widening its container to match them.
+final class FlexiblePopUpButton: NSPopUpButton {
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: NSView.noIntrinsicMetric, height: super.intrinsicContentSize.height)
+    }
+}
+
 /// Runtime information for apps that want to report or gate filtering support.
 public enum FilterablePickerRuntime {
     public static var supportsNativeFiltering: Bool {
@@ -149,8 +161,8 @@ private final class OptionBox: NSObject {
     }
 }
 
-private extension ControlSize {
-    var nsControlSize: NSControl.ControlSize {
+extension ControlSize {
+    fileprivate var nsControlSize: NSControl.ControlSize {
         switch self {
         case .mini: .mini
         case .small: .small

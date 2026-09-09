@@ -4,6 +4,8 @@
 
 Filtering is localized and case-insensitive. Opening the menu starts with the full list. Typing filters the choices without changing the binding; choosing a menu item commits its ID.
 
+The picker takes the horizontal space offered by its SwiftUI layout instead of widening its container to fit the longest item. A selected title that does not fit is truncated; menu items retain their full titles.
+
 If the required private API is unavailable the component falls back to a `Picker`. `FilterablePickerRuntime.supportsNativeFiltering` can be used to check.
 
 > [!WARNING]
