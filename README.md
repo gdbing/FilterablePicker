@@ -9,6 +9,28 @@ If the required private API is unavailable the component falls back to a `Picker
 > [!WARNING]
 > Filtering uses private AppKit API. Do not use this package in a Mac App Store app. Private API can change or disappear in any macOS update.
 
+## Installation
+
+In Xcode, choose **File > Add Package Dependencies** and enter:
+
+```text
+https://github.com/gdbing/FilterablePicker.git
+```
+
+Select the `FilterablePicker` library product and add it to your macOS app target.
+The package supports macOS 14 and later.
+
+For a Swift Package, add it to `Package.swift`:
+
+```swift
+dependencies: [
+    .package(
+        url: "https://github.com/gdbing/FilterablePicker.git",
+        from: "1.0.0"
+    )
+]
+```
+
 ## Usage
 
 ```swift
