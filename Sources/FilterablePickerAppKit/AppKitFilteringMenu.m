@@ -1,10 +1,13 @@
 #import "FilterablePickerAppKit.h"
 
-@interface FPAppKitFilteringMenu : NSMenu <NSMenuDelegate>
+// AppKit treats any menu class whose name contains "FilteringMenu" as a legacy
+// DVTFilteringMenu and logs a Carbon menu warning, so avoid that in the name.
+@interface FPSearchableMenu : NSMenu <NSMenuDelegate>
+- (void)menu:(NSMenu *)menu performSearchWithString:(nullable NSString *)query;
 - (void)performSearchWithString:(nullable NSString *)query inMenu:(NSMenu *)menu;
 @end
 
-@implementation FPAppKitFilteringMenu
+@implementation FPSearchableMenu
 
 - (instancetype)initWithTitle:(NSString *)title {
     self = [super initWithTitle:title];
@@ -15,7 +18,7 @@
 }
 
 - (void)setDelegate:(id<NSMenuDelegate>)delegate {
-    // AppKit detects performSearchWithString:inMenu: on the NSMenu delegate.
+    // AppKit detects the search callbacks on the NSMenu delegate.
     [super setDelegate:self];
 }
 
@@ -28,8 +31,18 @@
 }
 
 // AppKit owns the native filter field, focus, keyboard handling, layout, menu
-// tracking, and dismissal. This callback only supplies substring matching.
+// tracking, and dismissal. These callbacks only supply substring matching.
+- (void)menu:(NSMenu *)menu performSearchWithString:(nullable NSString *)query {
+    [self filterMenu:menu withQuery:query];
+}
+
+// Legacy DVTFilteringMenu callback, used where AppKit lacks the delegate
+// callback above. AppKit prefers the delegate callback when both exist.
 - (void)performSearchWithString:(nullable NSString *)query inMenu:(NSMenu *)menu {
+    [self filterMenu:menu withQuery:query];
+}
+
+- (void)filterMenu:(NSMenu *)menu withQuery:(nullable NSString *)query {
     NSString *normalizedQuery = query ?: @"";
     for (NSMenuItem *item in menu.itemArray) {
         item.hidden = normalizedQuery.length > 0 &&
@@ -46,13 +59,13 @@
 @end
 
 BOOL FPIsNativeMenuFilteringAvailable(void) {
-    SEL capability = NSSelectorFromString(@"_delegateWantsDVTPerformSearchCall");
-    return [NSMenu instancesRespondToSelector:capability];
+    return [NSMenu instancesRespondToSelector:NSSelectorFromString(@"_delegateWantsPerformSearchCall")] ||
+        [NSMenu instancesRespondToSelector:NSSelectorFromString(@"_delegateWantsDVTPerformSearchCall")];
 }
 
 NSMenu *FPCreateNativeFilteringMenu(NSString *title) {
     if (!FPIsNativeMenuFilteringAvailable()) {
         return nil;
     }
-    return [[FPAppKitFilteringMenu alloc] initWithTitle:title];
+    return [[FPSearchableMenu alloc] initWithTitle:title];
 }
