@@ -12,6 +12,7 @@ public struct FilterablePicker<Item: Identifiable>: NSViewRepresentable {
     private let label: String
     private let items: [Item]
     private let title: (Item) -> String
+    private let section: (Item) -> String?
     @Binding private var selection: Item.ID
 
     @Environment(\.controlSize) private var controlSize
@@ -23,9 +24,25 @@ public struct FilterablePicker<Item: Identifiable>: NSViewRepresentable {
         items: [Item],
         title: @escaping (Item) -> String
     ) {
+        self.init(label, selection: selection, items: items, title: title, section: { _ in nil })
+    }
+
+    /// A picker whose items are grouped under section headers.
+    ///
+    /// Consecutive items with the same section share one header above them; an
+    /// item whose section is `nil` has none. Typing a section's title shows every
+    /// item in it, and a header is hidden while none of its items match.
+    public init(
+        _ label: String,
+        selection: Binding<Item.ID>,
+        items: [Item],
+        title: @escaping (Item) -> String,
+        section: @escaping (Item) -> String?
+    ) {
         self.label = label
         self.items = items
         self.title = title
+        self.section = section
         _selection = selection
     }
 
@@ -45,7 +62,7 @@ public struct FilterablePicker<Item: Identifiable>: NSViewRepresentable {
 
     public func updateNSView(_ button: NSPopUpButton, context: Context) {
         let options = items.map {
-            Option(id: AnyHashable($0.id), title: title($0))
+            Option(id: AnyHashable($0.id), title: title($0), section: section($0))
         }
 
         context.coordinator.update(
@@ -85,7 +102,12 @@ public struct FilterablePicker<Item: Identifiable>: NSViewRepresentable {
             if options != renderedOptions {
                 renderedOptions = options
                 menu.removeAllItems()
+                var currentSection: String?
                 menuItems = options.map { option in
+                    if let section = option.section, section != currentSection {
+                        menu.addItem(.sectionHeader(title: section))
+                    }
+                    currentSection = option.section
                     let item = NSMenuItem(
                         title: option.title,
                         action: #selector(choose(_:)),
@@ -151,6 +173,7 @@ public enum FilterablePickerRuntime {
 private struct Option: Equatable {
     let id: AnyHashable
     let title: String
+    let section: String?
 }
 
 private final class OptionBox: NSObject {

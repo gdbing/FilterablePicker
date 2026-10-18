@@ -66,3 +66,19 @@ struct Example: View {
 ```
 
 Add the package to your app and link the `FilterablePicker` library product. Items need unique, stable IDs; display titles may be duplicated.
+
+### Sections
+
+Pass `section:` to group items under native menu section headers. Consecutive items with the same section share one header; an item whose section is `nil` has none.
+
+```swift
+FilterablePicker(
+    "Model",
+    selection: $selectedID,
+    items: models,
+    title: \.name,
+    section: \.group
+)
+```
+
+Typing a section's title shows every item in that section. Otherwise items match on their own titles, and a header is hidden while none of its items match.

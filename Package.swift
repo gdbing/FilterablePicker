@@ -18,7 +18,7 @@ let package = Package(
         ),
         .testTarget(
             name: "FilterablePickerTests",
-            dependencies: ["FilterablePicker"]
+            dependencies: ["FilterablePicker", "FilterablePickerAppKit"]
         ),
     ]
 )
